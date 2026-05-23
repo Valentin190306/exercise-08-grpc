@@ -1,1 +1,33 @@
-# TODO: 3 services: db, grpc-server (50051), gateway (8080)
+services:
+  db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-noderegistry}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-noderegistry}
+      POSTGRES_DB: ${POSTGRES_DB:-noderegistry}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-noderegistry} -d $${POSTGRES_DB:-noderegistry}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grpc-server:
+    build: ./grpc_server
+    ports:
+      - "50051:50051"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-noderegistry}:${POSTGRES_PASSWORD:-noderegistry}@db:5432/${POSTGRES_DB:-noderegistry}
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      grpc-server:
+        condition: service_started
+    environment:
+      - GRPC_SERVER_ADDR=grpc-server:50051
